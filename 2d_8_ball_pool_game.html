@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D 8-Ball Pool - 2 Player Local</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Perspective Tilt Effect for Pool Table Container */
+        .table-perspective {
+            perspective: 1000px;
+        }
+
+        .table-3d-wrap {
+            transform: rotateX(12deg);
+            transform-style: preserve-3d;
+            box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Pulsing Glow for Current Player */
+        .glow-p1 {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+        }
+        .glow-p2 {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+        }
+
+        /* Glassmorphism Cards */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-between overflow-x-hidden select-none">
+
+    <!-- Top Navigation & Scoreboard -->
+    <header class="w-full max-w-5xl px-4 py-3 mt-2">
+        <div class="glass-panel rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+            <!-- Player 1 Status -->
+            <div id="p1-card" class="flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/30 glow-p1">
+                <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-lg shadow-lg shrink-0">
+                    P1
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-blue-400">Player 1</span>
+                        <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-200 border border-blue-400/30">Blue Cue</span>
+                    </div>
+                    <div id="p1-type" class="text-xs font-semibold text-slate-300 mt-0.5">Type: <span class="text-amber-400">Unassigned</span></div>
+                    <div id="p1-balls" class="flex flex-wrap gap-1 mt-1.5 items-center min-h-[20px]"></div>
+                </div>
+            </div>
+
+            <!-- Game Center Info & Status Message -->
+            <div class="text-center flex-1 min-w-[200px]">
+                <div class="text-xs uppercase tracking-widest text-slate-400 font-bold mb-1">8-Ball Pool Match</div>
+                <div id="status-banner" class="text-sm md:text-base font-extrabold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-1 rounded-lg inline-block animate-pulse">
+                    Player 1's Break Shot!
+                </div>
+            </div>
+
+            <!-- Player 2 Status -->
+            <div id="p2-card" class="flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-300 border border-red-500/30 bg-red-950/20 opacity-60">
+                <div class="text-right">
+                    <div class="flex items-center gap-2 justify-end">
+                        <span class="text-xs px-2 py-0.5 rounded bg-red-900/60 text-red-200 border border-red-400/30">Red Cue</span>
+                        <span class="font-bold text-red-400">Player 2</span>
+                    </div>
+                    <div id="p2-type" class="text-xs font-semibold text-slate-300 mt-0.5">Type: <span class="text-amber-400">Unassigned</span></div>
+                    <div id="p2-balls" class="flex flex-wrap gap-1 mt-1.5 items-center justify-end min-h-[20px]"></div>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center font-bold text-lg shadow-lg shrink-0">
+                    P2
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Canvas Container with Perspective -->
+    <main class="w-full max-w-5xl px-2 flex-1 flex flex-col items-center justify-center relative my-2">
+        <div class="table-perspective w-full flex justify-center items-center">
+            <div id="table-wrapper" class="table-3d-wrap relative rounded-3xl p-4 bg-amber-950 border-8 border-amber-900 shadow-2xl overflow-hidden max-w-full">
+                <!-- Canvas Element -->
+                <canvas id="poolCanvas" class="rounded-xl cursor-crosshair block mx-auto"></canvas>
+            </div>
+        </div>
+
+        <!-- Controls & Shot Indicator Bar -->
+        <div class="w-full max-w-3xl mt-4 glass-panel p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <!-- Step Controls Info -->
+            <div class="flex items-center gap-3">
+                <div id="step-badge" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold uppercase rounded-lg shadow">
+                    Step 1: Aiming
+                </div>
+                <div id="step-hint" class="text-xs md:text-sm text-slate-300 font-medium">
+                    Move mouse/finger to aim. Click canvas or press Space to lock aim.
+                </div>
+            </div>
+
+            <!-- Power Bar & Fire Button -->
+            <div class="flex items-center gap-4 w-full md:w-auto justify-end">
+                <div class="flex flex-col gap-1 w-36 sm:w-48">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-slate-400">Shot Power</span>
+                        <span id="power-percent" class="text-amber-400">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-700">
+                        <div id="power-fill" class="bg-gradient-to-r from-green-500 via-yellow-400 to-red-500 h-full rounded-full transition-all duration-75" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <button id="action-btn" class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 text-white font-bold text-sm rounded-xl shadow-lg transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-crosshairs"></i>
+                    <span id="btn-text">Lock Aim</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer Buttons & Controls -->
+    <footer class="w-full max-w-5xl px-4 py-3 mb-2 flex items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center gap-2">
+            <button id="sound-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
+                <i id="sound-icon" class="fa-solid fa-volume-high text-emerald-400"></i> Sound
+            </button>
+            <button id="rules-btn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-circle-info text-blue-400"></i> Rules
+            </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button id="reset-btn" class="px-3 py-1.5 rounded-lg bg-rose-900/40 border border-rose-500/30 hover:bg-rose-800/60 text-rose-200 flex items-center gap-1.5 transition font-semibold">
+                <i class="fa-solid fa-rotate-right"></i> Restart Game
+            </button>
+        </div>
+    </footer>
+
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-2xl p-6 relative border border-slate-700 text-slate-200 shadow-2xl">
+            <button id="close-rules" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h3 class="text-xl font-bold text-amber-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-book-open"></i> 8-Ball Pool Rules
+            </h3>
+            <ul class="text-xs space-y-2.5 text-slate-300 list-disc pl-4 leading-relaxed">
+                <li><strong>Break Shot:</strong> Player 1 breaks first. Table remains <span class="text-amber-300 font-semibold">Open</span> until the first object ball is pocketed.</li>
+                <li><strong>Group Assignment:</strong> Pocketing the first ball assigns you either <span class="text-amber-400 font-semibold">Solids (1-7)</span> or <span class="text-purple-400 font-semibold">Stripes (9-15)</span>.</li>
+                <li><strong>Turns:</strong> Legally pocket one of your assigned balls to gain another turn.</li>
+                <li><strong>Scratch Foul:</strong> Pocketing the white cue ball or missing all balls grants opponent <strong>Ball-in-Hand</strong> (click table to place cue ball).</li>
+                <li><strong>Winning:</strong> Clear all your assigned group balls, then legally pocket the <strong>8-Ball</strong> into any pocket.</li>
+                <li><strong>Instant Loss:</strong> Pocketing the 8-Ball prematurely or scratching on the 8-Ball loses the match instantly!</li>
+            </ul>
+            <button id="modal-ok" class="w-full mt-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm transition">
+                Got It, Let's Play!
+            </button>
+        </div>
+    </div>
+
+    <!-- Victory Overlay -->
+    <div id="victory-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-2xl p-8 text-center border border-amber-500/50 shadow-2xl relative overflow-hidden">
+            <div class="w-20 h-20 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-400 flex items-center justify-center text-4xl mx-auto mb-4 animate-bounce">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 id="winner-title" class="text-3xl font-extrabold text-white mb-2">PLAYER 1 WINS!</h2>
+            <p id="winner-sub" class="text-sm text-slate-300 mb-6">Cleared all balls and pocketed the 8-Ball legally!</p>
+            <button id="play-again-btn" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-xl text-base shadow-lg hover:brightness-110 active:scale-95 transition">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /* Audio Engine using Web Audio API */
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+            }
+
+            playHit(power) {
+                if (!this.enabled) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120 + power * 150, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+
+                gain.gain.setValueAtTime(Math.min(1.0, 0.2 + power * 0.8), now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+
+            playClack(intensity = 0.5) {
+                if (!this.enabled) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600 + intensity * 400, now);
+                osc.frequency.exponentialRampToValueAtTime(150, now + 0.05);
+
+                gain.gain.setValueAtTime(Math.min(0.8, 0.1 + intensity * 0.5), now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+
+            playPocket() {
+                if (!this.enabled) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(60, now + 0.25);
+
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        }
+
+        const audio = new AudioEngine();
+    </script>
+
+    <script>
+        const canvas = document.getElementById('poolCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Table Constants
+        const TABLE_WIDTH = 900;
+        const TABLE_HEIGHT = 480;
+        const MARGIN = 50; // Wood border margin
+        const POCKET_RADIUS = 24;
+        const BALL_RADIUS = 13;
+        const FRICTION = 0.988; // Deceleration factor
+
+        // 3D Rotation Helper for Rolling Balls
+        function rotateVector3D(v, ax, ay, az, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const dot = v[0] * ax + v[1] * ay + v[2] * az;
+            const crossX = ay * v[2] - az * v[1];
+            const crossY = az * v[0] - ax * v[2];
+            const crossZ = ax * v[1] - ay * v[0];
+
+            return [
+                v[0] * cos + crossX * sin + ax * dot * (1 - cos),
+                v[1] * cos + crossY * sin + ay * dot * (1 - cos),
+                v[2] * cos + crossZ * sin + az * dot * (1 - cos)
+            ];
+        }
+
+        function renormalizeOrientation(b) {
+            let u = b.u, v = b.v, w = b.w;
+            let lenU = Math.hypot(u[0], u[1], u[2]) || 1;
+            u = [u[0]/lenU, u[1]/lenU, u[2]/lenU];
+
+            let dotUV = v[0]*u[0] + v[1]*u[1] + v[2]*u[2];
+            v = [v[0] - dotUV*u[0], v[1] - dotUV*u[1], v[2] - dotUV*u[2]];
+            let lenV = Math.hypot(v[0], v[1], v[2]) || 1;
+            v = [v[0]/lenV, v[1]/lenV, v[2]/lenV];
+
+            w = [
+                u[1]*v[2] - u[2]*v[1],
+                u[2]*v[0] - u[0]*v[2],
+                u[0]*v[1] - u[1]*v[0]
+            ];
+
+            b.u = u; b.v = v; b.w = w;
+        }
+
+        // Responsive Scaling Setup
+        function setupCanvasDimensions() {
+            const container = document.getElementById('table-wrapper');
+            const maxW = Math.min(window.innerWidth - 32, 920);
+            const scale = maxW / TABLE_WIDTH;
+            
+            canvas.width = TABLE_WIDTH;
+            canvas.height = TABLE_HEIGHT;
+            
+            canvas.style.width = `${TABLE_WIDTH * scale}px`;
+            canvas.style.height = `${TABLE_HEIGHT * scale}px`;
+        }
+
+        window.addEventListener('resize', setupCanvasDimensions);
+
+        // Ball Class
+        class Ball {
+            constructor(x, y, number, color, isStriped = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.number = number;
+                this.color = color;
+                this.isStriped = isStriped;
+                this.inPocket = false;
+                this.radius = BALL_RADIUS;
+
+                // 3D Orientation basis vectors (u: right, v: stripe pole, w: number face)
+                this.u = [1, 0, 0];
+                this.v = [0, 1, 0];
+                this.w = [0, 0, 1];
+            }
+
+            update() {
+                if (this.inPocket) return;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                const speed = Math.hypot(this.vx, this.vy);
+                if (speed > 0.01) {
+                    // Calculate 3D rolling rotation around movement axis
+                    const angle = speed / this.radius;
+                    const ax = -this.vy / speed; // Axis perpendicular to velocity
+                    const ay = this.vx / speed;
+
+                    this.u = rotateVector3D(this.u, ax, ay, 0, angle);
+                    this.v = rotateVector3D(this.v, ax, ay, 0, angle);
+                    this.w = rotateVector3D(this.w, ax, ay, 0, angle);
+
+                    renormalizeOrientation(this);
+                }
+
+                // Apply Friction
+                this.vx *= FRICTION;
+                this.vy *= FRICTION;
+
+                // Stop tiny vibrations
+                if (speed < 0.05) {
+                    this.vx = 0;
+                    this.vy = 0;
+                }
+            }
+
+            draw(ctx) {
+                if (this.inPocket) return;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Ball Shadow on felt
+                ctx.beginPath();
+                ctx.arc(3, 3, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.fill();
+
+                // Base Sphere Surface
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.isStriped ? '#f8fafc' : this.color;
+                ctx.fill();
+
+                // Clip rolling surface elements inside sphere bounds
+                ctx.save();
+                ctx.clip();
+
+                // Draw Rolling Stripe (for striped object balls)
+                if (this.isStriped) {
+                    const vx = this.v[0];
+                    const vy = this.v[1];
+                    const vz = this.v[2];
+
+                    ctx.save();
+                    const angle = Math.atan2(vy, vx);
+                    ctx.rotate(angle);
+
+                    const tiltFactor = Math.sqrt(Math.max(0, 1 - vz * vz));
+                    
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    const bandThickness = this.radius * 1.1;
+                    ctx.ellipse(0, 0, this.radius * 1.05, bandThickness * 0.5 * (0.3 + 0.7 * tiltFactor), 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.restore();
+                }
+
+                // Draw Rolling Number Spot or Cue Ball Spin Indicator
+                if (this.number !== 0) {
+                    const wx = this.w[0];
+                    const wy = this.w[1];
+                    const wz = this.w[2];
+
+                    // Render spot when on front visible hemisphere
+                    if (wz > -0.1) {
+                        const spotX = wx * this.radius;
+                        const spotY = wy * this.radius;
+                        const spotRadius = this.radius * 0.45;
+                        const scaleZ = Math.max(0.05, wz);
+                        const spotAngle = Math.atan2(wy, wx);
+
+                        ctx.save();
+                        ctx.translate(spotX, spotY);
+                        ctx.rotate(spotAngle);
+                        ctx.scale(scaleZ, 1); // Perspective depth scaling
+
+                        // White Circle Spot
+                        ctx.beginPath();
+                        ctx.arc(0, 0, spotRadius, 0, Math.PI * 2);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fill();
+                        ctx.lineWidth = 0.5;
+                        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                        ctx.stroke();
+
+                        // Number Text inside spot
+                        ctx.fillStyle = '#0f172a';
+                        ctx.font = 'bold 9px Outfit, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(this.number.toString(), 0, 0.5);
+
+                        ctx.restore();
+                    }
+                } else {
+                    // Cue Ball Red Spot to make spin & rolling visible
+                    const wx = this.w[0];
+                    const wy = this.w[1];
+                    const wz = this.w[2];
+
+                    if (wz > 0) {
+                        ctx.beginPath();
+                        ctx.arc(wx * this.radius * 0.7, wy * this.radius * 0.7, 2.5 * wz, 0, Math.PI * 2);
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fill();
+                    }
+                }
+
+                ctx.restore(); // End sphere clipping
+
+                // Static Overhead Glossy Highlight (Stays fixed relative to light source)
+                const grad = ctx.createRadialGradient(-3, -3, 1, -1, -1, this.radius);
+                grad.addColorStop(0, 'rgba(255, 255, 255, 0.65)');
+                grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.15)');
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        // Pocket Configuration
+        const POCKETS = [
+            { x: MARGIN + 8, y: MARGIN + 8 },                             // Top Left
+            { x: TABLE_WIDTH / 2, y: MARGIN + 2 },                         // Top Center
+            { x: TABLE_WIDTH - MARGIN - 8, y: MARGIN + 8 },               // Top Right
+            { x: MARGIN + 8, y: TABLE_HEIGHT - MARGIN - 8 },              // Bottom Left
+            { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - MARGIN - 2 },          // Bottom Center
+            { x: TABLE_WIDTH - MARGIN - 8, y: TABLE_HEIGHT - MARGIN - 8 }  // Bottom Right
+        ];
+
+        // Ball Color Definition Array
+        const BALL_COLORS = [
+            '#ffffff', // 0 Cue
+            '#eab308', // 1 Yellow
+            '#1d4ed8', // 2 Blue
+            '#dc2626', // 3 Red
+            '#7e22ce', // 4 Purple
+            '#f97316', // 5 Orange
+            '#15803d', // 6 Green
+            '#991b1b', // 7 Maroon
+            '#0f172a', // 8 Black
+            '#eab308', // 9 Striped Yellow
+            '#1d4ed8', // 10 Striped Blue
+            '#dc2626', // 11 Striped Red
+            '#7e22ce', // 12 Striped Purple
+            '#f97316', // 13 Striped Orange
+            '#15803d', // 14 Striped Green
+            '#991b1b'  // 15 Striped Maroon
+        ];
+
+        // Game State Management Variables
+        let balls = [];
+        let cueBall = null;
+
+        let currentPlayer = 1; // 1 or 2
+        let playerTypes = { 1: null, 2: null }; // 'solids' or 'stripes'
+        
+        // Shooting System States: 'AIM' -> 'POWER' -> 'BALLS_MOVING' -> 'BALL_IN_HAND'
+        let stepState = 'AIM';
+        let aimAngle = 0;
+        let powerValue = 0;
+        let powerDirection = 1; // 1 = increasing, -1 = decreasing
+        let powerAnimFrame = null;
+        
+        let pocketedThisTurn = [];
+        let firstHitBall = null;
+        let scratchFoul = false;
+        let isGameOver = false;
+
+        // Mouse Tracker
+        let mousePos = { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT / 2 };
+
+        function initGame() {
+            balls = [];
+            isGameOver = false;
+            currentPlayer = 1;
+            playerTypes = { 1: null, 2: null };
+            stepState = 'AIM';
+
+            // 1. Cue Ball
+            cueBall = new Ball(TABLE_WIDTH * 0.28, TABLE_HEIGHT / 2, 0, BALL_COLORS[0]);
+            balls.push(cueBall);
+
+            // 2. Standard Triangular Rack Arrangement (15 Object Balls)
+            const rackStartX = TABLE_WIDTH * 0.68;
+            const rackStartY = TABLE_HEIGHT / 2;
+            const r = BALL_RADIUS;
+            const spacing = r * 2.05;
+
+            // Ball Order Mapping for Balanced Rack Setup (8-ball in center)
+            const rackNumbers = [
+                1,
+                10, 2,
+                3, 8, 11,
+                12, 7, 14, 4,
+                5, 13, 6, 9, 15
+            ];
+
+            let index = 0;
+            for (let col = 0; col < 5; col++) {
+                const x = rackStartX + col * (spacing * 0.866); // cos(30)
+                const startY = rackStartY - col * (spacing / 2);
+
+                for (let row = 0; row <= col; row++) {
+                    const y = startY + row * spacing;
+                    const num = rackNumbers[index++];
+                    const isStriped = num >= 9 && num <= 15;
+                    const color = BALL_COLORS[num];
+                    
+                    const ball = new Ball(x, y, num, color, isStriped);
+
+                    // Randomize initial resting orientation so balls look natural
+                    const randAx = Math.random() - 0.5;
+                    const randAy = Math.random() - 0.5;
+                    const randLen = Math.hypot(randAx, randAy) || 1;
+                    const randAngle = Math.random() * Math.PI * 2;
+                    ball.u = rotateVector3D(ball.u, randAx/randLen, randAy/randLen, 0, randAngle);
+                    ball.v = rotateVector3D(ball.v, randAx/randLen, randAy/randLen, 0, randAngle);
+                    ball.w = rotateVector3D(ball.w, randAx/randLen, randAy/randLen, 0, randAngle);
+                    renormalizeOrientation(ball);
+
+                    balls.push(ball);
+                }
+            }
+
+            updateHUD();
+            updateControlsUI();
+            showBanner("Player 1's Break Shot!");
+        }
+
+        function handleCollisions() {
+            // 1. Ball vs Cushion (Borders)
+            const minX = MARGIN + BALL_RADIUS;
+            const maxX = TABLE_WIDTH - MARGIN - BALL_RADIUS;
+            const minY = MARGIN + BALL_RADIUS;
+            const maxY = TABLE_HEIGHT - MARGIN - BALL_RADIUS;
+
+            for (let b of balls) {
+                if (b.inPocket) continue;
+
+                if (b.x < minX) {
+                    b.x = minX;
+                    b.vx *= -0.85;
+                    audio.playClack(Math.abs(b.vx) / 10);
+                } else if (b.x > maxX) {
+                    b.x = maxX;
+                    b.vx *= -0.85;
+                    audio.playClack(Math.abs(b.vx) / 10);
+                }
+
+                if (b.y < minY) {
+                    b.y = minY;
+                    b.vy *= -0.85;
+                    audio.playClack(Math.abs(b.vy) / 10);
+                } else if (b.y > maxY) {
+                    b.y = maxY;
+                    b.vy *= -0.85;
+                    audio.playClack(Math.abs(b.vy) / 10);
+                }
+
+                // 2. Ball vs Pockets
+                for (let p of POCKETS) {
+                    const dist = Math.hypot(b.x - p.x, b.y - p.y);
+                    if (dist < POCKET_RADIUS) {
+                        b.inPocket = true;
+                        b.vx = 0;
+                        b.vy = 0;
+                        audio.playPocket();
+                        onBallPocketed(b);
+                        break;
+                    }
+                }
+            }
+
+            // 3. Ball vs Ball Collisions
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    let b1 = balls[i];
+                    let b2 = balls[j];
+
+                    if (b1.inPocket || b2.inPocket) continue;
+
+                    let dx = b2.x - b1.x;
+                    let dy = b2.y - b1.y;
+                    let dist = Math.hypot(dx, dy);
+                    let minDist = BALL_RADIUS * 2;
+
+                    if (dist < minDist) {
+                        // Track first hit ball for Cue Ball
+                        if (stepState === 'BALLS_MOVING' && !firstHitBall) {
+                            if (b1 === cueBall) firstHitBall = b2;
+                            else if (b2 === cueBall) firstHitBall = b1;
+                        }
+
+                        // Normal vector
+                        let nx = dx / (dist || 1);
+                        let ny = dy / (dist || 1);
+
+                        // Separate overlapping balls
+                        let overlap = 0.5 * (minDist - dist);
+                        b1.x -= nx * overlap;
+                        b1.y -= ny * overlap;
+                        b2.x += nx * overlap;
+                        b2.y += ny * overlap;
+
+                        // Elastic Collision Response (Equal Mass)
+                        let kx = b1.vx - b2.vx;
+                        let ky = b1.vy - b2.vy;
+                        let p = 2 * (nx * kx + ny * ky) / 2;
+
+                        b1.vx -= p * nx;
+                        b1.vy -= p * ny;
+                        b2.vx += p * nx;
+                        b2.vy += p * ny;
+
+                        const impactVel = Math.hypot(p * nx, p * ny);
+                        if (impactVel > 0.2) {
+                            audio.playClack(impactVel / 15);
+                        }
+                    }
+                }
+            }
+        }
+
+        function onBallPocketed(ball) {
+            if (ball.number === 0) {
+                scratchFoul = true;
+            } else {
+                pocketedThisTurn.push(ball);
+            }
+        }
+
+        function checkAreBallsMoving() {
+            for (let b of balls) {
+                if (!b.inPocket && (Math.abs(b.vx) > 0 || Math.abs(b.vy) > 0)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function handleTurnEnd() {
+            let turnContinued = false;
+            let foul = scratchFoul;
+
+            // Check First Ball Contact Foul
+            if (!foul && firstHitBall) {
+                const assignedType = playerTypes[currentPlayer];
+                if (assignedType === 'solids' && firstHitBall.isStriped) foul = true;
+                if (assignedType === 'stripes' && !firstHitBall.isStriped && firstHitBall.number !== 8) foul = true;
+                if (assignedType && firstHitBall.number === 8 && hasRemainingBalls(assignedType)) foul = true;
+            } else if (!firstHitBall) {
+                // Didn't hit any ball!
+                foul = true;
+            }
+
+            // 8-Ball Pocket Rules
+            const eightBall = balls.find(b => b.number === 8);
+            if (eightBall && eightBall.inPocket) {
+                const currentType = playerTypes[currentPlayer];
+                const clearedGroup = currentType && !hasRemainingBalls(currentType);
+
+                if (clearedGroup && !foul) {
+                    endGame(currentPlayer, `Player ${currentPlayer} legally pocketed the 8-Ball!`);
+                } else {
+                    const winner = currentPlayer === 1 ? 2 : 1;
+                    endGame(winner, `Player ${currentPlayer} pocketed the 8-Ball prematurely or committed a foul!`);
+                }
+                return;
+            }
+
+            // Group Assignment Logic
+            if (!foul && pocketedThisTurn.length > 0 && !playerTypes[1]) {
+                const validBall = pocketedThisTurn.find(b => b.number !== 0 && b.number !== 8);
+                if (validBall) {
+                    if (validBall.isStriped) {
+                        playerTypes[currentPlayer] = 'stripes';
+                        playerTypes[currentPlayer === 1 ? 2 : 1] = 'solids';
+                    } else {
+                        playerTypes[currentPlayer] = 'solids';
+                        playerTypes[currentPlayer === 1 ? 2 : 1] = 'stripes';
+                    }
+                    showBanner(`Player ${currentPlayer} assigned ${playerTypes[currentPlayer].toUpperCase()}!`);
+                }
+            }
+
+            // Check if player gets another turn
+            if (!foul && pocketedThisTurn.length > 0) {
+                const currentType = playerTypes[currentPlayer];
+                if (!currentType) {
+                    turnContinued = true; // Open table pocket
+                } else {
+                    const hitMyGroup = pocketedThisTurn.some(b => 
+                        (currentType === 'stripes' && b.isStriped) || 
+                        (currentType === 'solids' && !b.isStriped && b.number !== 8)
+                    );
+                    if (hitMyGroup) turnContinued = true;
+                }
+            }
+
+            // Handle Scratch / Cue Ball Reset
+            if (cueBall.inPocket) {
+                cueBall.inPocket = false;
+                cueBall.vx = 0;
+                cueBall.vy = 0;
+                cueBall.x = TABLE_WIDTH * 0.28;
+                cueBall.y = TABLE_HEIGHT / 2;
+                foul = true;
+            }
+
+            // Switch Player or Continue
+            if (foul) {
+                currentPlayer = currentPlayer === 1 ? 2 : 1;
+                stepState = 'BALL_IN_HAND';
+                showBanner(`Foul! Player ${currentPlayer} gets Ball-In-Hand!`);
+            } else if (turnContinued) {
+                stepState = 'AIM';
+                showBanner(`Player ${currentPlayer} pocketed a ball! Shoot again.`);
+            } else {
+                currentPlayer = currentPlayer === 1 ? 2 : 1;
+                stepState = 'AIM';
+                showBanner(`Player ${currentPlayer}'s Turn`);
+            }
+
+            // Reset Shot Variables
+            pocketedThisTurn = [];
+            firstHitBall = null;
+            scratchFoul = false;
+
+            updateHUD();
+            updateControlsUI();
+        }
+
+        function hasRemainingBalls(type) {
+            return balls.some(b => !b.inPocket && b.number !== 0 && b.number !== 8 && 
+                (type === 'stripes' ? b.isStriped : !b.isStriped));
+        }
+
+        function updateHUD() {
+            const p1Card = document.getElementById('p1-card');
+            const p2Card = document.getElementById('p2-card');
+            const p1Type = document.getElementById('p1-type');
+            const p2Type = document.getElementById('p2-type');
+
+            if (currentPlayer === 1) {
+                p1Card.classList.add('glow-p1', 'opacity-100');
+                p1Card.classList.remove('opacity-60');
+                p2Card.classList.remove('glow-p2', 'opacity-100');
+                p2Card.classList.add('opacity-60');
+            } else {
+                p2Card.classList.add('glow-p2', 'opacity-100');
+                p2Card.classList.remove('opacity-60');
+                p1Card.classList.remove('glow-p1', 'opacity-100');
+                p1Card.classList.add('opacity-60');
+            }
+
+            p1Type.innerHTML = `Type: <span class="text-amber-400 font-bold">${playerTypes[1] ? playerTypes[1].toUpperCase() : 'Open Table'}</span>`;
+            p2Type.innerHTML = `Type: <span class="text-amber-400 font-bold">${playerTypes[2] ? playerTypes[2].toUpperCase() : 'Open Table'}</span>`;
+
+            updatePlayerRemainingBalls(1, 'p1-balls');
+            updatePlayerRemainingBalls(2, 'p2-balls');
+        }
+
+        function updatePlayerRemainingBalls(playerNum, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const type = playerTypes[playerNum];
+            if (!type) {
+                container.innerHTML = `<span class="text-[10px] text-slate-400 italic">Open Table</span>`;
+                return;
+            }
+
+            const isSolids = type === 'solids';
+            const minNum = isSolids ? 1 : 9;
+            const maxNum = isSolids ? 7 : 15;
+
+            // Find remaining unpocketed balls for player's group
+            const remaining = balls
+                .filter(b => !b.inPocket && b.number >= minNum && b.number <= maxNum)
+                .sort((a, b) => a.number - b.number);
+
+            if (remaining.length > 0) {
+                container.innerHTML = remaining.map(b => renderBallBadge(b.number)).join('');
+            } else {
+                // Group is cleared! Player needs the 8-Ball to win
+                container.innerHTML = `<span class="text-[10px] font-bold text-amber-400 mr-1">Target:</span>${renderBallBadge(8)}`;
+            }
+        }
+
+        function renderBallBadge(num) {
+            if (num === 8) {
+                return `<div title="8-Ball (Target)" class="w-5 h-5 rounded-full bg-slate-900 border border-amber-400 text-amber-400 font-extrabold text-[10px] flex items-center justify-center shadow animate-pulse">8</div>`;
+            }
+            const color = BALL_COLORS[num];
+            const isStriped = num >= 9 && num <= 15;
+            if (isStriped) {
+                return `<div title="Ball ${num}" class="w-5 h-5 rounded-full bg-slate-100 border border-slate-300 relative overflow-hidden flex items-center justify-center shadow text-[9px] font-black text-slate-900">
+                    <div class="absolute inset-x-0 h-2" style="background-color: ${color}"></div>
+                    <span class="relative z-10 bg-white/90 px-0.5 rounded-full text-[8px] leading-none">${num}</span>
+                </div>`;
+            } else {
+                return `<div title="Ball ${num}" class="w-5 h-5 rounded-full text-white font-black text-[9px] flex items-center justify-center shadow border border-white/20" style="background-color: ${color}">
+                    ${num}
+                </div>`;
+            }
+        }
+
+        function showBanner(msg) {
+            const banner = document.getElementById('status-banner');
+            banner.innerText = msg;
+        }
+
+        function updateControlsUI() {
+            const badge = document.getElementById('step-badge');
+            const hint = document.getElementById('step-hint');
+            const btnText = document.getElementById('btn-text');
+
+            if (stepState === 'AIM') {
+                badge.innerText = 'Step 1: Aiming';
+                badge.className = 'px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold uppercase rounded-lg shadow';
+                hint.innerText = 'Move mouse/finger to aim cue stick. Click canvas or press button to lock.';
+                btnText.innerText = 'Lock Aim';
+            } else if (stepState === 'POWER') {
+                badge.innerText = 'Step 2: Power';
+                badge.className = 'px-3 py-1.5 bg-amber-600 text-white text-xs font-bold uppercase rounded-lg shadow';
+                hint.innerText = 'Power meter animated. Click canvas or space when ready to shoot!';
+                btnText.innerText = 'Shoot!';
+            } else if (stepState === 'BALL_IN_HAND') {
+                badge.innerText = 'Ball-in-Hand';
+                badge.className = 'px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold uppercase rounded-lg shadow';
+                hint.innerText = 'Click anywhere on table to place cue ball.';
+                btnText.innerText = 'Place Cue Ball';
+            } else {
+                badge.innerText = 'In Motion';
+                badge.className = 'px-3 py-1.5 bg-slate-700 text-slate-300 text-xs font-bold uppercase rounded-lg shadow';
+                hint.innerText = 'Waiting for balls to stop...';
+                btnText.innerText = 'Waiting...';
+            }
+        }
+
+        function animatePowerMeter() {
+            if (stepState !== 'POWER') return;
+
+            powerValue += powerDirection * 2.2;
+            if (powerValue >= 100) {
+                powerValue = 100;
+                powerDirection = -1;
+            } else if (powerValue <= 0) {
+                powerValue = 0;
+                powerDirection = 1;
+            }
+
+            document.getElementById('power-fill').style.width = `${powerValue}%`;
+            document.getElementById('power-percent').innerText = `${Math.round(powerValue)}%`;
+
+            powerAnimFrame = requestAnimationFrame(animatePowerMeter);
+        }
+
+        function startPowerStep() {
+            stepState = 'POWER';
+            powerValue = 0;
+            powerDirection = 1;
+            updateControlsUI();
+            animatePowerMeter();
+        }
+
+        function executeShot() {
+            if (stepState !== 'POWER') return;
+
+            cancelAnimationFrame(powerAnimFrame);
+            stepState = 'BALLS_MOVING';
+            updateControlsUI();
+
+            const impulse = (powerValue / 100) * 22 + 2;
+            cueBall.vx = Math.cos(aimAngle) * impulse;
+            cueBall.vy = Math.sin(aimAngle) * impulse;
+
+            audio.playHit(powerValue / 100);
+
+            // Reset Power Bar
+            document.getElementById('power-fill').style.width = `0%`;
+            document.getElementById('power-percent').innerText = `0%`;
+        }
+
+        function drawTable() {
+            // 1. Table Wooden Outer Frame
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+
+            // 2. Inner Wood Cushion Rail
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(MARGIN - 12, MARGIN - 12, TABLE_WIDTH - (MARGIN - 12) * 2, TABLE_HEIGHT - (MARGIN - 12) * 2);
+
+            // 3. Green Felt Playing Surface
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(MARGIN, MARGIN, TABLE_WIDTH - MARGIN * 2, TABLE_HEIGHT - MARGIN * 2);
+
+            // 4. Head String Line & Head Spot Marker
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(TABLE_WIDTH * 0.28, MARGIN);
+            ctx.lineTo(TABLE_WIDTH * 0.28, TABLE_HEIGHT - MARGIN);
+            ctx.stroke();
+
+            // Head Spot
+            ctx.beginPath();
+            ctx.arc(TABLE_WIDTH * 0.28, TABLE_HEIGHT / 2, 3, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fill();
+
+            // 5. Draw Pockets
+            for (let p of POCKETS) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = '#020617';
+                ctx.fill();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#1e293b';
+                ctx.stroke();
+            }
+        }
+
+        function drawCueStick() {
+            if (stepState !== 'AIM' && stepState !== 'POWER') return;
+
+            ctx.save();
+            ctx.translate(cueBall.x, cueBall.y);
+            ctx.rotate(aimAngle);
+
+            // Offset distance based on power step animation
+            const pullBack = stepState === 'POWER' ? (powerValue / 100) * 35 : 0;
+            const distance = BALL_RADIUS + 12 + pullBack;
+
+            // Stick Colors based on Player (Blue vs Red)
+            const cueColor = currentPlayer === 1 ? '#2563eb' : '#dc2626';
+            const accentColor = currentPlayer === 1 ? '#93c5fd' : '#fca5a5';
+
+            // Main Stick Shaft
+            ctx.beginPath();
+            ctx.moveTo(-distance, 0);
+            ctx.lineTo(-distance - 260, -4);
+            ctx.lineTo(-distance - 260, 4);
+            ctx.closePath();
+            ctx.fillStyle = cueColor;
+            ctx.fill();
+
+            // Handle Grip Accent
+            ctx.beginPath();
+            ctx.moveTo(-distance - 140, -3.2);
+            ctx.lineTo(-distance - 260, -4);
+            ctx.lineTo(-distance - 260, 4);
+            ctx.lineTo(-distance - 140, 3.2);
+            ctx.closePath();
+            ctx.fillStyle = accentColor;
+            ctx.fill();
+
+            // Tip Leather Highlight
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(-distance - 3, -2, 3, 4);
+
+            ctx.restore();
+        }
+
+        function drawTrajectoryLine() {
+            if (stepState !== 'AIM' && stepState !== 'POWER') return;
+
+            const dx = Math.cos(aimAngle);
+            const dy = Math.sin(aimAngle);
+
+            let closestDist = 800;
+            let targetBall = null;
+
+            // Find closest ball in aiming ray
+            for (let b of balls) {
+                if (b === cueBall || b.inPocket) continue;
+
+                const vx = b.x - cueBall.x;
+                const vy = b.y - cueBall.y;
+
+                const dot = vx * dx + vy * dy;
+                if (dot > 0) {
+                    const perpDist = Math.abs(vx * dy - vy * dx);
+                    if (perpDist < BALL_RADIUS * 2) {
+                        const hitDist = dot - Math.sqrt(Math.pow(BALL_RADIUS * 2, 2) - Math.pow(perpDist, 2));
+                        if (hitDist > 0 && hitDist < closestDist) {
+                            closestDist = hitDist;
+                            targetBall = b;
+                        }
+                    }
+                }
+            }
+
+            ctx.save();
+
+            // 1. Cue Ball Aim Ray to Impact Position
+            const endX = cueBall.x + dx * closestDist;
+            const endY = cueBall.y + dy * closestDist;
+
+            ctx.beginPath();
+            ctx.setLineDash([6, 6]);
+            ctx.moveTo(cueBall.x, cueBall.y);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // 2. Trajectory Extensions upon impact
+            if (targetBall) {
+                const impactDx = targetBall.x - endX;
+                const impactDy = targetBall.y - endY;
+                const impactDist = Math.hypot(impactDx, impactDy) || 1;
+
+                // Target Direction (White Line)
+                const targetDirX = impactDx / impactDist;
+                const targetDirY = impactDy / impactDist;
+
+                // Cue Ball Tangent Deflection Direction (Yellow Line)
+                let cueDeflectX = -targetDirY;
+                let cueDeflectY = targetDirX;
+
+                if (cueDeflectX * dx + cueDeflectY * dy < 0) {
+                    cueDeflectX = -cueDeflectX;
+                    cueDeflectY = -cueDeflectY;
+                }
+
+                // A) Ghost Cue Ball Circle
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(endX, endY, BALL_RADIUS, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.lineWidth = 1.5;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.fill();
+                ctx.stroke();
+
+                // B) WHITE Trajectory Line (Target Ball Path)
+                const targetLineLength = 120;
+                ctx.beginPath();
+                ctx.moveTo(targetBall.x, targetBall.y);
+                ctx.lineTo(
+                    targetBall.x + targetDirX * targetLineLength,
+                    targetBall.y + targetDirY * targetLineLength
+                );
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(
+                    targetBall.x + targetDirX * targetLineLength,
+                    targetBall.y + targetDirY * targetLineLength,
+                    3, 0, Math.PI * 2
+                );
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // C) YELLOW Trajectory Line (Cue Ball Path After Collision)
+                const cueLineLength = 90;
+                ctx.beginPath();
+                ctx.moveTo(endX, endY);
+                ctx.lineTo(
+                    endX + cueDeflectX * cueLineLength,
+                    endY + cueDeflectY * cueLineLength
+                );
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(
+                    endX + cueDeflectX * cueLineLength,
+                    endY + cueDeflectY * cueLineLength,
+                    3, 0, Math.PI * 2
+                );
+                ctx.fillStyle = '#facc15';
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+
+            if (stepState === 'BALLS_MOVING') {
+                handleCollisions();
+                for (let b of balls) {
+                    b.update();
+                }
+                if (!checkAreBallsMoving()) {
+                    handleTurnEnd();
+                }
+            }
+
+            drawTable();
+            drawTrajectoryLine();
+            drawCueStick();
+            for (let b of balls) {
+                b.draw(ctx);
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        // Canvas Interaction Events
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = TABLE_WIDTH / rect.width;
+            const scaleY = TABLE_HEIGHT / rect.height;
+            mousePos.x = (e.clientX - rect.left) * scaleX;
+            mousePos.y = (e.clientY - rect.top) * scaleY;
+
+            if (stepState === 'BALL_IN_HAND') {
+                const minX = MARGIN + BALL_RADIUS;
+                const maxX = TABLE_WIDTH - MARGIN - BALL_RADIUS;
+                const minY = MARGIN + BALL_RADIUS;
+                const maxY = TABLE_HEIGHT - MARGIN - BALL_RADIUS;
+                cueBall.x = Math.max(minX, Math.min(maxX, mousePos.x));
+                cueBall.y = Math.max(minY, Math.min(maxY, mousePos.y));
+            } else if (stepState === 'AIM') {
+                aimAngle = Math.atan2(mousePos.y - cueBall.y, mousePos.x - cueBall.x);
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (stepState === 'BALL_IN_HAND') {
+                let overlap = false;
+                for (let b of balls) {
+                    if (b === cueBall || b.inPocket) continue;
+                    if (Math.hypot(b.x - cueBall.x, b.y - cueBall.y) < BALL_RADIUS * 2) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (!overlap) {
+                    stepState = 'AIM';
+                    showBanner(`Cue Ball placed! Player ${currentPlayer}'s turn.`);
+                    updateControlsUI();
+                }
+            } else if (stepState === 'AIM') {
+                startPowerStep();
+            } else if (stepState === 'POWER') {
+                executeShot();
+            }
+        });
+
+        // Touch Device Interactions
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = TABLE_WIDTH / rect.width;
+                const scaleY = TABLE_HEIGHT / rect.height;
+                mousePos.x = (e.touches[0].clientX - rect.left) * scaleX;
+                mousePos.y = (e.touches[0].clientY - rect.top) * scaleY;
+
+                if (stepState === 'BALL_IN_HAND') {
+                    const minX = MARGIN + BALL_RADIUS;
+                    const maxX = TABLE_WIDTH - MARGIN - BALL_RADIUS;
+                    const minY = MARGIN + BALL_RADIUS;
+                    const maxY = TABLE_HEIGHT - MARGIN - BALL_RADIUS;
+                    cueBall.x = Math.max(minX, Math.min(maxX, mousePos.x));
+                    cueBall.y = Math.max(minY, Math.min(maxY, mousePos.y));
+                } else if (stepState === 'AIM') {
+                    aimAngle = Math.atan2(mousePos.y - cueBall.y, mousePos.x - cueBall.x);
+                }
+            }
+        }, { passive: false });
+
+        // Action Button Handler
+        document.getElementById('action-btn').addEventListener('click', () => {
+            if (stepState === 'AIM') {
+                startPowerStep();
+            } else if (stepState === 'POWER') {
+                executeShot();
+            } else if (stepState === 'BALL_IN_HAND') {
+                stepState = 'AIM';
+                showBanner(`Cue Ball placed! Player ${currentPlayer}'s turn.`);
+                updateControlsUI();
+            }
+        });
+
+        // Keyboard Shortcut (Spacebar)
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (stepState === 'AIM') {
+                    startPowerStep();
+                } else if (stepState === 'POWER') {
+                    executeShot();
+                }
+            }
+        });
+
+        // Game Over Overlay Trigger
+        function endGame(winner, reason) {
+            isGameOver = true;
+            document.getElementById('winner-title').innerText = `PLAYER ${winner} WINS!`;
+            document.getElementById('winner-sub').innerText = reason;
+            document.getElementById('victory-modal').classList.remove('hidden');
+        }
+
+        // UI Control Listeners
+        document.getElementById('reset-btn').addEventListener('click', initGame);
+        document.getElementById('play-again-btn').addEventListener('click', () => {
+            document.getElementById('victory-modal').classList.add('hidden');
+            initGame();
+        });
+
+        document.getElementById('rules-btn').addEventListener('click', () => {
+            document.getElementById('rules-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('close-rules').addEventListener('click', () => {
+            document.getElementById('rules-modal').classList.add('hidden');
+        });
+
+        document.getElementById('modal-ok').addEventListener('click', () => {
+            document.getElementById('rules-modal').classList.add('hidden');
+        });
+
+        document.getElementById('sound-btn').addEventListener('click', () => {
+            audio.enabled = !audio.enabled;
+            const icon = document.getElementById('sound-icon');
+            if (audio.enabled) {
+                icon.className = 'fa-solid fa-volume-high text-emerald-400';
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+            }
+        });
+
+        // Start Application on Load
+        window.onload = () => {
+            setupCanvasDimensions();
+            initGame();
+            render();
+        };
+    </script>
+</body>
+</html>
